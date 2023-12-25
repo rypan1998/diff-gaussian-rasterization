@@ -194,8 +194,8 @@ __global__ void preprocessCUDA(int P, int D, int M,
 		return;
 
 	// Transform point by projecting
-	float3 p_orig = { orig_points[3 * idx], orig_points[3 * idx + 1], orig_points[3 * idx + 2] };
-	float4 p_hom = transformPoint4x4(p_orig, projmatrix);
+	float3 p_orig = { orig_points[3 * idx], orig_points[3 * idx + 1], orig_points[3 * idx + 2] }; // 椭球的中心点
+	float4 p_hom = transformPoint4x4(p_orig, projmatrix); // 利用 projmatrix 把 3D 投影到 2D 平面
 	float p_w = 1.0f / (p_hom.w + 0.0000001f);
 	float3 p_proj = { p_hom.x * p_w, p_hom.y * p_w, p_hom.z * p_w };
 
@@ -208,12 +208,12 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	}
 	else
 	{
-		computeCov3D(scales[idx], scale_modifier, rotations[idx], cov3Ds + idx * 6);
+		computeCov3D(scales[idx], scale_modifier, rotations[idx], cov3Ds + idx * 6); // 计算椭球的三个轴的长度
 		cov3D = cov3Ds + idx * 6;
 	}
 
 	// Compute 2D screen-space covariance matrix
-	float3 cov = computeCov2D(p_orig, focal_x, focal_y, tan_fovx, tan_fovy, cov3D, viewmatrix);
+	float3 cov = computeCov2D(p_orig, focal_x, focal_y, tan_fovx, tan_fovy, cov3D, viewmatrix); // 椭球投影在2D上的椭圆，用矩阵来描述
 
 	// Invert covariance (EWA algorithm)
 	float det = (cov.x * cov.z - cov.y * cov.y);
@@ -226,13 +226,13 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	// 2D covariance matrix). Use extent to compute a bounding rectangle
 	// of screen-space tiles that this Gaussian overlaps with. Quit if
 	// rectangle covers 0 tiles. 
-	float mid = 0.5f * (cov.x + cov.z);
+	float mid = 0.5f * (cov.x + cov.z); // 求椭圆矩阵的特征值（长、短轴）
 	float lambda1 = mid + sqrt(max(0.1f, mid * mid - det));
 	float lambda2 = mid - sqrt(max(0.1f, mid * mid - det));
-	float my_radius = ceil(3.f * sqrt(max(lambda1, lambda2)));
+	float my_radius = ceil(3.f * sqrt(max(lambda1, lambda2))); // 高斯分布：3个标准差即可覆盖98%的面积，因此把这个值作为近似的圆的半径
 	float2 point_image = { ndc2Pix(p_proj.x, W), ndc2Pix(p_proj.y, H) };
 	uint2 rect_min, rect_max;
-	getRect(point_image, my_radius, rect_min, rect_max, grid);
+	getRect(point_image, my_radius, rect_min, rect_max, grid); // 计算投影圆覆盖了哪些小方格（tile）
 	if ((rect_max.x - rect_min.x) * (rect_max.y - rect_min.y) == 0)
 		return;
 
@@ -252,7 +252,7 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	points_xy_image[idx] = point_image;
 	// Inverse 2D covariance and opacity neatly pack into one float4
 	conic_opacity[idx] = { conic.x, conic.y, conic.z, opacities[idx] };
-	tiles_touched[idx] = (rect_max.y - rect_min.y) * (rect_max.x - rect_min.x);
+	tiles_touched[idx] = (rect_max.y - rect_min.y) * (rect_max.x - rect_min.x); // 总共覆盖了多少个 tiles
 }
 
 // Main rasterization method. Collaboratively works on one tile per
@@ -329,10 +329,10 @@ renderCUDA(
 
 			// Resample using conic matrix (cf. "Surface 
 			// Splatting" by Zwicker et al., 2001)
-			float2 xy = collected_xy[j];
-			float2 d = { xy.x - pixf.x, xy.y - pixf.y };
+			float2 xy = collected_xy[j];j // 取得像素点
+			float2 d = { xy.x - pixf.x, xy.y - pixf.y }; // 计算 XY 两个方向的距离
 			float4 con_o = collected_conic_opacity[j];
-			float power = -0.5f * (con_o.x * d.x * d.x + con_o.z * d.y * d.y) - con_o.y * d.x * d.y;
+			float power = -0.5f * (con_o.x * d.x * d.x + con_o.z * d.y * d.y) - con_o.y * d.x * d.y; // 该点在高斯分布中的概率
 			if (power > 0.0f)
 				continue;
 
